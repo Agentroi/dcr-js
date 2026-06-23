@@ -1,0 +1,68 @@
+/* Ghost/Preview styling for DCR elements */
+/* Subtle styling that doesn't change element sizes */
+
+/* Green for additions - subtle dashed outline */
+.dcr-preview-add {
+  opacity: 0.7 !important;
+}
+
+.dcr-preview-add rect {
+  stroke: #2d6a4f !important;
+  stroke-dasharray: 6, 3 !important;
+}
+
+.dcr-preview-add path {
+  stroke: #2d6a4f !important;
+  stroke-dasharray: 6, 3 !important;
+}
+
+.dcr-preview-add text {
+  fill: #2d6a4f !important;
+}
+
+/* Red for removals */
+.dcr-preview-remove {
+  opacity: 0.5 !important;
+}
+
+.dcr-preview-remove rect {
+  stroke: #c1121f !important;
+  stroke-dasharray: 6, 3 !important;
+}
+
+.dcr-preview-remove path {
+  stroke: #c1121f !important;
+  stroke-dasharray: 6, 3 !important;
+}
+
+.dcr-preview-remove text {
+  fill: #c1121f !important;
+  text-decoration: line-through !important;
+}
+
+/* Orange for modifications */
+.dcr-preview-modify {
+  opacity: 0.8 !important;
+}
+
+.dcr-preview-modify rect {
+  stroke: #e85d04 !important;
+  stroke-dasharray: 6, 3 !important;
+}
+
+.dcr-preview-modify path {
+  stroke: #e85d04 !important;
+  stroke-dasharray: 6, 3 !important;
+}
+
+/* Subtle pulsing animation */
+@keyframes dcr-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.dcr-preview-add,
+.dcr-preview-remove,
+.dcr-preview-modify {
+  animation: dcr-pulse 1.5s ease-in-out infinite;
+}

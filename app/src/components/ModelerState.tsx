@@ -41,6 +41,7 @@ import {
 import ReactiveModeler from "./ReactiveModeler";
 import TestDrivenModeling from "./TestDrivenModeling";
 import { useBPMN } from '../utilComponents/useBPMN';
+import Chat from './Chat';
 
 
 
@@ -551,6 +552,7 @@ const ModelerState = ({
           setLoading={setLoading}
         />
       )}
+      <Chat modeler={modeler} />
     </>
   );
 };
