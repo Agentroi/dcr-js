@@ -1,6 +1,6 @@
 /**
  * DCR function execution. Mutations apply directly; keep/revert is handled
- * post-turn by the backend review (revert restores the model via load_model).
+ * post-turn by the backend review (revert restores the graph via load_graph).
  */
 
 import type DCRModeler from "modeler";
@@ -312,7 +312,7 @@ export function createDCRFunctions(
           }
         }
 
-        case "clear_model": {
+        case "clear_graph": {
           // Remove all events (relations are removed automatically)
           const allElements = Object.values(elementRegistry._elements)
             .map(entry => entry.element)
@@ -486,14 +486,14 @@ export function createDCRFunctions(
               findInitiallyPending: false,
             });
             // Discovery applies live like any other mutation; the turn-end
-            // review handles keep/revert (revert is backend-driven via load_model).
+            // review handles keep/revert (revert is backend-driven via load_graph).
             const xml = await layout(graph);
             await (modeler as unknown as { importXML: (xml: string) => Promise<void> }).importXML(xml);
             const model = getState();
             return {
               id, success: true,
               message: `Discovered model from ${attached.name} (${model?.events.length ?? 0} events)`,
-              data: { model },
+              data: { graph: model },
             };
           } catch (e) {
             return { id, success: false, message: `Discovery failed: ${e}` };
@@ -535,13 +535,13 @@ export function createDCRFunctions(
           }
         }
 
-        case "load_model": {
+        case "load_graph": {
           // Replace the entire model with a given one (events + relations), laid
           // out. Used to restore a snapshot (edit/undo) or revert a preview.
           if (!modeler) {
             return { id, success: false, message: "No modeler available." };
           }
-          const model = params.model as {
+          const model = params.graph as {
             events?: Array<{ name: string; included?: boolean; pending?: boolean; executed?: boolean }>;
             relations?: Array<{ source: string; target: string; type: string }>;
           } | null;

@@ -7,8 +7,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
-  BiMessageDetail, BiX, BiSend, BiChevronDown, BiStop, BiPlus,
-  BiCheckShield, BiBoltCircle, BiLockAlt,
+  BiMessageDetail, BiX, BiSend, BiChevronDown, BiChevronUp, BiStop, BiPlus,
+  BiCheckShield, BiBoltCircle, BiLockAlt, BiPlayCircle, BiReset,
 } from "react-icons/bi";
 import type { IconType } from "react-icons";
 import type DCRModeler from "modeler";
@@ -41,11 +41,20 @@ const PERMISSION_ICONS: Record<PermissionLevel, IconType> = {
   "confirm": BiCheckShield,
   "auto-approve": BiBoltCircle,
   "discuss": BiLockAlt,
+  "simulate": BiPlayCircle,
 };
 
 interface ChatProps {
   modeler: DCRModeler | null;
 }
+
+/** A small health dot — green ok, red down, grey unknown. Sparse colour, by design. */
+const Dot = ({ status }: { status?: string }) => (
+  <span style={{
+    width: 6, height: 6, borderRadius: "50%", flexShrink: 0, display: "inline-block",
+    background: status === "ok" ? "#2d6a4f" : status === "down" ? "#c1121f" : "#bbb",
+  }} />
+);
 
 const Chat = ({ modeler }: ChatProps) => {
   const [open, setOpen] = useState(false);
@@ -60,6 +69,12 @@ const Chat = ({ modeler }: ChatProps) => {
   const [plan, setPlan] = useState<PlanState | null>(null);
   const [permissionLevel, setPermissionLevel] = useState<PermissionLevel>("confirm");
   const [permissionDropdownOpen, setPermissionDropdownOpen] = useState(false);
+  const [model, setModel] = useState<string | null>(null);  // the LLM answering, shown in the header
+  const [availableModels, setAvailableModels] = useState<string[]>([]);  // selectable set (local only)
+  const [canSelectModel, setCanSelectModel] = useState(false);  // false on a public deployment
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const [modelHealth, setModelHealth] = useState<Record<string, { status: string; detail?: string }>>({});
+  const [mirrorMode, setMirrorMode] = useState(false);  // canvas-only: the terminal drives, chat is inert
 
   const [size, setSize] = useState({ width: 380, height: 500 });
   const [isResizing, setIsResizing] = useState(false);
@@ -126,7 +141,11 @@ const Chat = ({ modeler }: ChatProps) => {
       ws.onmessage = async (event) => {
         const data = JSON.parse(event.data);
 
-        if (data.type === "assistant_delta") {
+        if (data.type === "session_created") {
+          // The CLI co-host marks the session as a read-only canvas mirror.
+          setMirrorMode(!!data.mirror);
+
+        } else if (data.type === "assistant_delta") {
           // Token streaming: append to the current streaming bubble (or start one).
           setMessages(prev => {
             const last = prev[prev.length - 1];
@@ -147,10 +166,23 @@ const Chat = ({ modeler }: ChatProps) => {
             return [...prev, { role: "assistant", content: data.content }];
           });
 
+        } else if (data.type === "model_info") {
+          // Which model is answering, the selectable set, and whether we may switch.
+          setModel(data.model);
+          setAvailableModels(data.available || []);
+          setCanSelectModel(!!data.can_select);
+          if (data.can_select) wsRef.current?.send(JSON.stringify({ type: "request_health" }));
+
+        } else if (data.type === "model_health") {
+          setModelHealth(data.health || {});
+
         } else if (data.type === "tool_activity") {
           // The agent acting, live — a quiet chip in the feed.
           if (data.status === "running") {
             setMessages(prev => [...prev, { role: "tool", content: data.label }]);
+          } else if (data.status === "result" && data.detail) {
+            // A reasoning/verification tool's verbatim result (what it checked + why).
+            setMessages(prev => [...prev, { role: "tool", content: data.label, detail: data.detail }]);
           }
 
         } else if (data.type === "layout") {
@@ -169,12 +201,12 @@ const Chat = ({ modeler }: ChatProps) => {
             setInPreviewMode(true);
           }
 
-        } else if (data.type === "revert_model") {
-          // Backend-owned revert: rebuild the canvas to the pre-turn model.
+        } else if (data.type === "revert_graph") {
+          // Backend-owned revert: rebuild the canvas to the pre-turn graph.
           await dcrFunctionsRef.current.execute({
             id: crypto.randomUUID(),
-            action: "load_model",
-            params: { model: data.model },
+            action: "load_graph",
+            params: { graph: data.graph },
           });
 
         } else if (data.type === "plan_updated") {
@@ -191,7 +223,7 @@ const Chat = ({ modeler }: ChatProps) => {
           setPlan(null);
           executeAllRef.current = false;
 
-        } else if (data.type === "model_reset") {
+        } else if (data.type === "graph_reset") {
           dcrFunctionsRef.current.clearModel?.();
           setMessages([]);
           setPlan(null);
@@ -215,12 +247,12 @@ const Chat = ({ modeler }: ChatProps) => {
           executeAllRef.current = false;
           setInPreviewMode(false);
           setPreviewSummary("");
-          // Rebuild the canvas to the rewound model (edit/undo).
-          if (data.model) {
+          // Rebuild the canvas to the rewound graph (edit/undo).
+          if (data.graph) {
             await dcrFunctionsRef.current.execute({
               id: crypto.randomUUID(),
-              action: "load_model",
-              params: { model: data.model },
+              action: "load_graph",
+              params: { graph: data.graph },
             });
           }
 
@@ -341,8 +373,8 @@ const Chat = ({ modeler }: ChatProps) => {
   }, []);
 
   const handleDecline = useCallback(() => {
-    // Revert this batch (backend restores the model and pushes it back via
-    // revert_model → load_model); the agent then reacts to the revert.
+    // Revert this batch (backend restores the graph and pushes it back via
+    // revert_graph → load_graph); the agent then reacts to the revert.
     if (!wsRef.current) return;
     setInPreviewMode(false);
     setPreviewSummary("");
@@ -374,6 +406,22 @@ const Chat = ({ modeler }: ChatProps) => {
     setPermissionLevel(level);
     setPermissionDropdownOpen(false);
     wsRef.current.send(JSON.stringify({ type: "set_permission", level }));
+  }, []);
+
+  const selectModel = useCallback((name: string) => {
+    if (!wsRef.current || name === model) return;
+    // Seamless: the backend applies it on the next turn; the model_info reply
+    // confirms the active model.
+    wsRef.current.send(JSON.stringify({ type: "set_model", model: name }));
+  }, [model]);
+
+  const requestHealth = useCallback(() => {
+    wsRef.current?.send(JSON.stringify({ type: "request_health" }));
+  }, []);
+
+  const resetMarkings = useCallback(() => {
+    // Simulation: put every event back to its initial marking.
+    wsRef.current?.send(JSON.stringify({ type: "reset_marking" }));
   }, []);
 
   const handleStop = useCallback(() => {
@@ -434,7 +482,7 @@ const Chat = ({ modeler }: ChatProps) => {
             <PermissionDropdown ref={permissionDropdownRef}>
               <PermissionButton
                 onClick={() => setPermissionDropdownOpen(!permissionDropdownOpen)}
-                title="How the assistant applies model edits"
+                title="How the assistant applies graph edits"
               >
                 {(() => { const Icon = PERMISSION_ICONS[permissionLevel]; return <Icon size={15} />; })()}
                 {PERMISSION_LABELS[permissionLevel]}
@@ -501,6 +549,51 @@ const Chat = ({ modeler }: ChatProps) => {
               onChange={handleAttachFile}
             />
 
+            {model && canSelectModel && availableModels.length > 0 && (
+              <div style={{ position: "relative", display: "flex", justifyContent: "flex-end",
+                            padding: "0 12px 4px" }}>
+                <button
+                  onClick={() => { setModelDropdownOpen(o => !o); requestHealth(); }}
+                  title={modelHealth[model]?.detail || "Model answering — click to switch"}
+                  style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11,
+                           color: "black", opacity: 0.75, background: "transparent", border: "none",
+                           cursor: "pointer", fontFamily: "inherit", padding: 0, maxWidth: 170 }}
+                >
+                  <Dot status={modelHealth[model]?.status} />
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{model}</span>
+                  <BiChevronUp size={13} style={{ flexShrink: 0 }} />
+                </button>
+                {modelDropdownOpen && (
+                  <div style={{ position: "absolute", bottom: "100%", right: 12, marginBottom: 4,
+                                background: "white", border: "1px solid black", borderRadius: 4,
+                                boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 25, minWidth: 170 }}>
+                    {availableModels.map(m => (
+                      <DropdownItem key={m} $selected={m === model}
+                        title={modelHealth[m]?.detail || ""}
+                        onClick={() => { selectModel(m); setModelDropdownOpen(false); }}>
+                        <Dot status={modelHealth[m]?.status} />
+                        <span>{m}</span>
+                      </DropdownItem>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {permissionLevel === "simulate" && (
+              <div style={{ display: "flex", justifyContent: "center", padding: "0 12px 6px" }}>
+                <button
+                  onClick={resetMarkings}
+                  title="Reset every event back to its initial marking"
+                  style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12,
+                           padding: "5px 12px", cursor: "pointer", fontFamily: "inherit",
+                           borderRadius: 4, border: "1px solid black", background: "white", color: "black" }}
+                >
+                  <BiReset size={14} /> Reset markings
+                </button>
+              </div>
+            )}
+
             <InputContainer>
               <AttachButton
                 onClick={() => fileInputRef.current?.click()}
@@ -514,11 +607,12 @@ const Chat = ({ modeler }: ChatProps) => {
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={
+                  mirrorMode ? "Driving from the terminal — this canvas is read-only" :
                   inPreviewMode ? "Accept or decline first..." :
                   !connected ? "Connecting..." :
                   "Describe your process..."
                 }
-                disabled={loading || !connected || inPreviewMode}
+                disabled={mirrorMode || loading || !connected || inPreviewMode}
               />
               {loading ? (
                 <StopButton onClick={handleStop}><BiStop size={16} /></StopButton>

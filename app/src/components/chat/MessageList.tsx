@@ -88,7 +88,16 @@ export default function MessageList({ messages, loading, onEditMessage, children
       )}
       {messages.map((msg, idx) => (
         msg.role === "tool" ? (
-          <ToolItem key={idx}><BiChevronsRight size={12} />{msg.content}</ToolItem>
+          <ToolItem key={idx}>
+            <BiChevronsRight size={12} />{msg.content}
+            {msg.detail && (
+              <pre style={{
+                margin: "4px 0 0 16px", padding: "6px 8px", fontSize: 11, lineHeight: 1.4,
+                whiteSpace: "pre-wrap", wordBreak: "break-word", opacity: 0.75,
+                borderLeft: "2px solid currentColor", fontFamily: "inherit",
+              }}>{msg.detail}</pre>
+            )}
+          </ToolItem>
         ) : (
         <MessageBubble key={idx} $role={msg.role} $editing={editingIdx === idx}>
           {editingIdx === idx ? (
