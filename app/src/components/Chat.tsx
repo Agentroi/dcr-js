@@ -88,12 +88,33 @@ const Chat = ({ modeler }: ChatProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const permissionDropdownRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const permissionLevelRef = useRef<PermissionLevel>(permissionLevel);
   const executeAllRef = useRef(false);
   const dragDepth = useRef(0);
 
   useEffect(() => { dcrFunctionsRef.current = createDCRFunctions(modeler, () => attachedLogRef.current); }, [modeler]);
   useEffect(() => { permissionLevelRef.current = permissionLevel; }, [permissionLevel]);
+  // Entering simulate mode snapshots the current marking, so "Reset markings" goes
+  // back to the model as it was when simulation began (not a blank slate).
+  useEffect(() => {
+    if (permissionLevel === "simulate") dcrFunctionsRef.current.snapshotMarking?.();
+  }, [permissionLevel]);
+  // Grow the input with its content (CSS min/max-height bound it; it scrolls past the max).
+  // Only measure when there's content — measuring an empty textarea on mount (while the
+  // panel is still laying out) wraps the placeholder and reports a too-tall scrollHeight.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    if (input) el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
+
+  // Keep focus in the message box: refocus whenever it becomes editable again (after a
+  // response finishes, on connect), so the user can keep typing without clicking back in.
+  useEffect(() => {
+    if (!loading && connected && !inPreviewMode && !mirrorMode) inputRef.current?.focus();
+  }, [loading, connected, inPreviewMode, mirrorMode]);
   useEffect(() => { attachedLogRef.current = attachedLog; }, [attachedLog]);
   useEffect(() => { attachedDocRef.current = attachedDoc; }, [attachedDoc]);
 
@@ -551,7 +572,7 @@ const Chat = ({ modeler }: ChatProps) => {
 
             {model && canSelectModel && availableModels.length > 0 && (
               <div style={{ position: "relative", display: "flex", justifyContent: "flex-end",
-                            padding: "0 12px 4px" }}>
+                            padding: "0 12px 4px", background: "#fafafa" }}>
                 <button
                   onClick={() => { setModelDropdownOpen(o => !o); requestHealth(); }}
                   title={modelHealth[model]?.detail || "Model answering — click to switch"}
@@ -581,7 +602,8 @@ const Chat = ({ modeler }: ChatProps) => {
             )}
 
             {permissionLevel === "simulate" && (
-              <div style={{ display: "flex", justifyContent: "center", padding: "0 12px 6px" }}>
+              <div style={{ display: "flex", justifyContent: "center", padding: "0 12px 6px",
+                            background: "#fafafa" }}>
                 <button
                   onClick={resetMarkings}
                   title="Reset every event back to its initial marking"
@@ -603,6 +625,7 @@ const Chat = ({ modeler }: ChatProps) => {
                 <BiPlus size={18} />
               </AttachButton>
               <Input
+                ref={inputRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}

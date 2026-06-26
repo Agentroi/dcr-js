@@ -42,6 +42,7 @@ export function createDCRFunctions(
       runAutoLayout: async () => {},
       getState: () => null,
       clearModel: async () => {},
+      snapshotMarking: () => {},
     };
   }
 
@@ -63,6 +64,11 @@ export function createDCRFunctions(
     getRootElement: () => unknown;
     viewbox: () => { x: number; y: number; width: number; height: number };
   };
+
+  // Marking captured when simulation starts (snapshotMarking). "Reset markings"
+  // restores THIS, not a blank slate — the model usually already has a marking
+  // when the user enters simulate mode.
+  let markingSnapshot: { executed: Set<string>; included: Set<string>; pending: Set<string> } | null = null;
 
   // Get current graph state including roles
   const getState = () => {
@@ -404,14 +410,17 @@ export function createDCRFunctions(
             const typedGraph = graph as Parameters<typeof execFn>[1];
 
             const savedMarking = copyMarking(typedGraph.marking);
-            const results: Array<{ event: string; enabled: boolean }> = [];
+            const results: Array<{ event: string; enabled: boolean; executed: boolean; accepting: boolean }> = [];
 
             for (const eventName of trace) {
               const enabled = isEnabledFn(eventName, typedGraph);
-              results.push({ event: eventName, enabled });
               if (enabled) {
                 execFn(eventName, typedGraph);
               }
+              // Enabled-ness and execution carry forward on the SAME graph, so a step
+              // whose condition an earlier step satisfied is now enabled. `accepting`
+              // is the state after this step (after executing it, if it was enabled).
+              results.push({ event: eventName, enabled, executed: enabled, accepting: isAccFn(typedGraph) });
             }
 
             const accepting = isAccFn(typedGraph);
@@ -432,17 +441,27 @@ export function createDCRFunctions(
         }
 
         case "reset_marking": {
-          // Reset all events to initial marking (included, not executed, not pending)
+          // Restore the marking captured when simulation started, so "reset" means
+          // "back to where we began", not "wipe to blank". Falls back to the default
+          // initial marking only if no snapshot was taken.
           for (const entry of Object.values(elementRegistry._elements)) {
-            const el = entry.element as { type?: string };
+            const el = entry.element as { type?: string; businessObject?: { description?: string } };
             if (el.type !== "dcr:Event") continue;
-            modeling.updateProperties(entry.element, {
-              executed: false,
-              pending: false,
-              included: true,
-            });
+            const name = el.businessObject?.description;
+            if (markingSnapshot && name) {
+              modeling.updateProperties(entry.element, {
+                executed: markingSnapshot.executed.has(name),
+                pending: markingSnapshot.pending.has(name),
+                included: markingSnapshot.included.has(name),
+              });
+            } else {
+              modeling.updateProperties(entry.element, { executed: false, pending: false, included: true });
+            }
           }
-          return { id, success: true, message: "Marking reset to initial state" };
+          return {
+            id, success: true,
+            message: markingSnapshot ? "Marking reset to where simulation started" : "Marking reset to initial state",
+          };
         }
 
         case "generate": {
@@ -683,7 +702,22 @@ export function createDCRFunctions(
     }
   };
 
-  return { execute, runAutoLayout, getState, clearModel };
+  // Capture the current marking as the simulation baseline. Called when the user
+  // enters simulate mode, so reset_marking restores to this point.
+  const snapshotMarking = () => {
+    try {
+      const g = moddleToDCR(elementRegistry, true);
+      markingSnapshot = {
+        executed: new Set(g.marking.executed),
+        included: new Set(g.marking.included),
+        pending: new Set(g.marking.pending),
+      };
+    } catch (e) {
+      console.error("Snapshot marking failed:", e);
+    }
+  };
+
+  return { execute, runAutoLayout, getState, clearModel, snapshotMarking };
 }
 
 function mapToRecord(map: Record<string, Set<string>>): Record<string, string[]> {
