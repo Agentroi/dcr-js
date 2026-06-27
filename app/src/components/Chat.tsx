@@ -72,6 +72,7 @@ const Chat = ({ modeler }: ChatProps) => {
   const [model, setModel] = useState<string | null>(null);  // the LLM answering, shown in the header
   const [availableModels, setAvailableModels] = useState<string[]>([]);  // selectable set (local only)
   const [canSelectModel, setCanSelectModel] = useState(false);  // false on a public deployment
+  const [backendVersion, setBackendVersion] = useState<string | null>(null);  // shown in the footer
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [modelHealth, setModelHealth] = useState<Record<string, { status: string; detail?: string }>>({});
   const [mirrorMode, setMirrorMode] = useState(false);  // canvas-only: the terminal drives, chat is inert
@@ -192,6 +193,7 @@ const Chat = ({ modeler }: ChatProps) => {
           setModel(data.model);
           setAvailableModels(data.available || []);
           setCanSelectModel(!!data.can_select);
+          setBackendVersion(data.version || null);
           if (data.can_select) wsRef.current?.send(JSON.stringify({ type: "request_health" }));
 
         } else if (data.type === "model_health") {
@@ -570,36 +572,41 @@ const Chat = ({ modeler }: ChatProps) => {
               onChange={handleAttachFile}
             />
 
-            {model && canSelectModel && availableModels.length > 0 && (
-              <div style={{ position: "relative", display: "flex", justifyContent: "flex-end",
-                            padding: "0 12px 4px", background: "#fafafa" }}>
-                <button
-                  onClick={() => { setModelDropdownOpen(o => !o); requestHealth(); }}
-                  title={modelHealth[model]?.detail || "Model answering — click to switch"}
-                  style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11,
-                           color: "black", opacity: 0.75, background: "transparent", border: "none",
-                           cursor: "pointer", fontFamily: "inherit", padding: 0, maxWidth: 170 }}
-                >
-                  <Dot status={modelHealth[model]?.status} />
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{model}</span>
-                  <BiChevronUp size={13} style={{ flexShrink: 0 }} />
-                </button>
-                {modelDropdownOpen && (
-                  <div style={{ position: "absolute", bottom: "100%", right: 12, marginBottom: 4,
-                                background: "white", border: "1px solid black", borderRadius: 4,
-                                boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 25, minWidth: 170 }}>
-                    {availableModels.map(m => (
-                      <DropdownItem key={m} $selected={m === model}
-                        title={modelHealth[m]?.detail || ""}
-                        onClick={() => { selectModel(m); setModelDropdownOpen(false); }}>
-                        <Dot status={modelHealth[m]?.status} />
-                        <span>{m}</span>
-                      </DropdownItem>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            <div style={{ position: "relative", display: "flex", justifyContent: "space-between",
+                          alignItems: "center", padding: "0 12px 4px", background: "#fafafa" }}>
+              <span style={{ fontSize: 11, color: "black", opacity: 0.4, fontFamily: "inherit" }}>
+                {backendVersion ? `DCR Assistant v${backendVersion}` : ""}
+              </span>
+              {model && canSelectModel && availableModels.length > 0 && (
+                <>
+                  <button
+                    onClick={() => { setModelDropdownOpen(o => !o); requestHealth(); }}
+                    title={modelHealth[model]?.detail || "Model answering — click to switch"}
+                    style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11,
+                             color: "black", opacity: 0.75, background: "transparent", border: "none",
+                             cursor: "pointer", fontFamily: "inherit", padding: 0, maxWidth: 170 }}
+                  >
+                    <Dot status={modelHealth[model]?.status} />
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{model}</span>
+                    <BiChevronUp size={13} style={{ flexShrink: 0 }} />
+                  </button>
+                  {modelDropdownOpen && (
+                    <div style={{ position: "absolute", bottom: "100%", right: 12, marginBottom: 4,
+                                  background: "white", border: "1px solid black", borderRadius: 4,
+                                  boxShadow: "0 2px 8px rgba(0,0,0,0.15)", zIndex: 25, minWidth: 170 }}>
+                      {availableModels.map(m => (
+                        <DropdownItem key={m} $selected={m === model}
+                          title={modelHealth[m]?.detail || ""}
+                          onClick={() => { selectModel(m); setModelDropdownOpen(false); }}>
+                          <Dot status={modelHealth[m]?.status} />
+                          <span>{m}</span>
+                        </DropdownItem>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
 
             {permissionLevel === "simulate" && (
               <div style={{ display: "flex", justifyContent: "center", padding: "0 12px 6px",

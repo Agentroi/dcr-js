@@ -1,0 +1,53 @@
+# Demo deployment of the DCR Assistant chat app (the `app/` workspace) to GitHub
+# Pages. Additive and self-contained: it does NOT modify the upstream dcr-js
+# workflow (static.yml) or vite config — delete this one file to remove the demo
+# deploy entirely.
+#
+# Set these as repo Variables (Settings -> Secrets and variables -> Actions ->
+# Variables):
+#   VITE_BACKEND_WS_URL  the backend WebSocket URL, e.g. wss://<app>.up.railway.app/ws
+#   VITE_BASE            the Pages sub-path, e.g. /dcr-js-chat/  (or "/" for a custom domain)
+name: Deploy chat demo to Pages
+
+on:
+  push:
+    branches: ["feature/dcr-assistant-chat"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy demo
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm install
+
+      - name: Build (inject backend URL + base, no shared-file changes)
+        env:
+          VITE_BACKEND_WS_URL: ${{ vars.VITE_BACKEND_WS_URL }}
+        run: cd app && npx tsc -b && npx vite build --base="${{ vars.VITE_BASE || '/dcr-js-chat/' }}"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./app/dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
