@@ -164,7 +164,7 @@ const Chat = ({ modeler }: ChatProps) => {
         const data = JSON.parse(event.data);
 
         if (data.type === "session_created") {
-          // The CLI co-host marks the session as a read-only canvas mirror.
+          // The terminal co-host marks the session as a read-only canvas mirror.
           setMirrorMode(!!data.mirror);
 
         } else if (data.type === "assistant_delta") {
