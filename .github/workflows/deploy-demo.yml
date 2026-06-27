@@ -11,7 +11,7 @@ name: Deploy chat demo to Pages
 
 on:
   push:
-    branches: ["feature/dcr-assistant-chat"]
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
