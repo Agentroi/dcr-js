@@ -6,7 +6,7 @@
 # Set these as repo Variables (Settings -> Secrets and variables -> Actions ->
 # Variables):
 #   VITE_BACKEND_WS_URL  the backend WebSocket URL, e.g. wss://<app>.up.railway.app/ws
-#   VITE_BASE            the Pages sub-path, e.g. /dcr-js-chat/  (or "/" for a custom domain)
+#   VITE_BASE            the Pages sub-path, e.g. /dcr-js  (or "/" for a custom domain)
 name: Deploy chat demo to Pages
 
 on:
@@ -42,7 +42,7 @@ jobs:
       - name: Build (inject backend URL + base, no shared-file changes)
         env:
           VITE_BACKEND_WS_URL: ${{ vars.VITE_BACKEND_WS_URL }}
-        run: cd app && npx tsc -b && npx vite build --base="${{ vars.VITE_BASE || '/dcr-js-chat/' }}"
+        run: cd app && npx tsc -b && npx vite build --base="${{ vars.VITE_BASE || '/dcr-js/' }}"
 
       - uses: actions/upload-pages-artifact@v3
         with:
