@@ -576,6 +576,7 @@ const Chat = ({ modeler }: ChatProps) => {
                           alignItems: "center", padding: "0 12px 4px", background: "#fafafa" }}>
               <span style={{ fontSize: 11, color: "black", opacity: 0.4, fontFamily: "inherit" }}>
                 {backendVersion ? `DCR Assistant v${backendVersion}` : ""}
+                {model && !canSelectModel ? ` · ${model} (agentroi)` : ""}
               </span>
               {model && canSelectModel && availableModels.length > 0 && (
                 <>
